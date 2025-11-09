@@ -1,0 +1,12 @@
+# LARGE FILES
+/raw/*.parquet
+/processed/
+/reports/*.csv
+
+# PYTHON & VSCODE
+__pycache__/
+*.pyc
+.vscode/
+
+# JUPYTER
+.ipynb_checkpoints/

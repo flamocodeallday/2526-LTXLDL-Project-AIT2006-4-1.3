@@ -1,0 +1,1 @@
+dữ liệu thô chưa xử lý
