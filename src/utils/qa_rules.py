@@ -20,7 +20,7 @@ def run_quality_check(df: pd.DataFrame) -> pd.DataFrame:
     # Rule 4: Distance is negative -> Action: Exclude 
     qa_flags['invalid_distance'] = df["trip_distance"] <= 0
 
-    # Rule 5: Speed is negative or too high -> Action: Exclude
+    # Rule 5: Speed is negative -> Action: Exclude
     qa_flags['invalid_speed'] = df['avg_speed_mph'] <= 0
 
     # Rule 6: Negative fare amount -> Action: Flag
@@ -68,7 +68,7 @@ def summarize_qa_flags(qa_flags: pd.DataFrame) -> pd.Series:
 
     # Count all row that has violations
     total_violated_rows = qa_flags.any(axis=1).sum()
-    total_violated_percent = (total_violated_rows / total_records * 100).round(2)
+    total_violated_percent = (total_violated_rows / total_records * 100).round(3)
     total_string = f"{total_violated_rows}/{total_violated_percent}%"
     
     final_list.append(total_string)
