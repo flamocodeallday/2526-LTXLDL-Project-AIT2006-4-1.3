@@ -68,6 +68,6 @@ def normalize(df_raw: pd.DataFrame) -> pd.DataFrame:
     'mta_tax',               # Dropped: Low variance / Irrelevant
     'improvement_surcharge'  # Dropped: Low variance / Irrelevant
     ]
-    df.drop(columns=cols_to_drop, axis=1, inplace=True)
+    df.drop(columns = cols_to_drop, axis=1, inplace=True)
 
     return df

@@ -5,7 +5,7 @@ import pandas as pd
 """
 def clean(normalized: pd.DataFrame, qa_flags: pd.DataFrame, threshold: int = 5):
     # Rules to remove due to invalid values
-    remove = ['is_duplicate', 'invalid_time_order', 'invalid_duration', 'invalid_distance', 'invalid_speed']
+    remove = ['is_duplicate', 'invalid_time_order', 'invalid_duration', 'invalid_distance', 'invalid_speed', 'invalid_month']
 
     # Identify rows that violates more than threshold columns
     qa_flags['total_violations'] = qa_flags.sum(axis=1)

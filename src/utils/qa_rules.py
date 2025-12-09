@@ -5,7 +5,7 @@ import numpy as np
     This function returns a mask pandas Dataframe of all values in 1 month data, 1 is violated the rule, 0 is otherwise.
 
 '''
-def run_quality_check(df: pd.DataFrame) -> pd.DataFrame:
+def run_quality_check(df: pd.DataFrame, current_month: int) -> pd.DataFrame:
     qa_flags = pd.DataFrame(index=df.index)
 
     # Rule 1: Duplicated rows -> Action: Exclude
@@ -23,22 +23,25 @@ def run_quality_check(df: pd.DataFrame) -> pd.DataFrame:
     # Rule 5: Speed is negative -> Action: Exclude
     qa_flags['invalid_speed'] = df['avg_speed_mph'] <= 0
 
-    # Rule 6: Negative fare amount -> Action: Flag
+    # Rule 6: Invalid month, year -> Action: Exclude 
+    qa_flags['invalid_month'] = (df['tpep_pickup_datetime'].dt.month != current_month) | (df['tpep_pickup_datetime'].dt.year != 2021)
+
+    # Rule 7: Negative fare amount -> Action: Flag
     qa_flags['invalid_fare_amount'] = df['fare_amount'] <= 0
 
-    # Rule 7: Negative tip amount -> Action: Flag
+    # Rule 8: Negative tip amount -> Action: Flag
     qa_flags['invalid_tip_amount'] = df['tip_amount'] < 0
 
-    # Rule 8: Negative total amount -> Action: Flag
+    # Rule 9: Negative total amount -> Action: Flag
     qa_flags['invalid_total_amount'] = df['total_amount'] <= 0
 
-    # Rule 9: Invalid payment type (not in range [0,6]) -> Action: Flag
+    # Rule 10: Invalid payment type (not in range [0,6]) -> Action: Flag
     qa_flags['invalid_payment_type'] = (df['payment_type'] < 0) | (df['payment_type'] > 6)
 
-    # Rule 10 Invalid passenger counts -> Action: Flag
+    # Rule 11: Invalid passenger counts -> Action: Flag
     qa_flags['invalid_passenger_count'] = df['passenger_count'] == 0
 
-    # Rule 11: Zone ID does not exist -> Action: Flag
+    # Rule 12: Zone ID does not exist -> Action: Flag
     qa_flags['invalid_zone'] = df[['PU_Borough', 'PU_Zone', 'DO_Borough', 'DO_Zone']].isna().any(axis = 1)
 
     return qa_flags
