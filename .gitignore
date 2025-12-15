@@ -1,6 +1,6 @@
 # LARGE FILES
 /raw/*.parquet
-/processed/
+/processed/**/*.parquet
 /reports/*.csv
 
 # PYTHON & VSCODE

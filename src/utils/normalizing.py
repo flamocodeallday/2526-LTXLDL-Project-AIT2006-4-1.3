@@ -13,7 +13,7 @@ Columns after: ['tpep_pickup_datetime', 'tpep_dropoff_datetime', 'passenger_coun
                 'payment_type', 'fare_amount', 'extra', 'tip_amount', 'tolls_amount', 
                 'total_amount', 'congestion_surcharge', 'ratecodeID_name', 'payment_type_name', 
                 'trip_duration_seconds', 'trip_duration_minutes', 'avg_speed_mph', 
-                'PU_Borough', 'PU_Zone', 'DO_Borough', 'DO_Zone', 'pickup_day_of_week']
+                'PU_Borough', 'PU_Zone', 'DO_Borough', 'DO_Zone', 'pickup_day_of_week', 'is_weekend', 'computed_total_amount']
 
 """
 
@@ -28,6 +28,9 @@ ratecodeID_map = {1: 'Standard rate', 2: 'JFK', 3: 'Newark', 4: 'Nassau or Westc
 def normalize(df_raw: pd.DataFrame) -> pd.DataFrame:
     df = df_raw.copy()
 
+    # Normalize datetime columns
+    df['tpep_pickup_datetime'] = pd.to_datetime(df['tpep_pickup_datetime'], errors='coerce').dt.tz_localize('America/New_York', ambiguous='NaT', nonexistent='NaT')
+    df['tpep_dropoff_datetime'] = pd.to_datetime(df['tpep_dropoff_datetime'], errors='coerce').dt.tz_localize('America/New_York', ambiguous='NaT', nonexistent='NaT')
     # Normalize RatecodeID 
     df['ratecodeID_name'] = df['RatecodeID'].map(ratecodeID_map)
     # Normalize Payment type
@@ -57,8 +60,11 @@ def normalize(df_raw: pd.DataFrame) -> pd.DataFrame:
     # Create new feature: trip's average speed
     df['avg_speed_mph'] = round(df['trip_distance'] / (df['trip_duration_seconds'] / 3600), 2)
     df['avg_speed_mph'].replace([np.inf, -np.inf], np.nan, inplace=True)
-    # Create new feture: trip's day in week (based on pick up time)
+    # Create new feture: trip's day in week, is_weekend (based on pick up time)
     df['pickup_day_of_week'] = df['tpep_pickup_datetime'].dt.day_name()
+    df['is_weekend'] = df['pickup_day_of_week'].isin(['Saturday', 'Sunday'])
+    #Create new feature: Compute sum of known components (use 0 for missing) to compare with total_amount
+    df['computed_total_amount'] = df[['fare_amount', 'tolls_amount', 'tip_amount', 'extra', 'congestion_surcharge', 'mta_tax', 'improvement_surcharge']].fillna(0).sum(axis=1)
 
     # Remove columns due to the number of NA values and based on the purpose of analysing
     cols_to_drop = [
