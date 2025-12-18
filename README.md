@@ -1,2 +1,6 @@
-# 2526-LTXLDL-Project-AIT2006-4-1.3
-A Python project for cleaning, normalizing, and aggregating NYC TLC taxi trip data
+# check kernel
+try:
+    shell = get_ipython().__class__.__name__
+    print(shell)
+except NameError:
+    print("Not in IPython/Jupyter")

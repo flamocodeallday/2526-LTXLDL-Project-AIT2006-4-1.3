@@ -1,9 +1,8 @@
-
+# ...existing code...
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 
 def visualize_summary(df_month: pd.DataFrame, kpi_month: pd.DataFrame) -> None: 
     df = df_month.copy()
