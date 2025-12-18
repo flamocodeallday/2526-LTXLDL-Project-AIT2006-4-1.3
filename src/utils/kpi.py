@@ -20,17 +20,20 @@ def kpi(df: pd.DataFrame, qa_flags: pd.DataFrame) -> dict:
 
     # Define aggregation rules
     agg_rules = {
-        'duration_p50': ('trip_duration_minutes', p50),
-        'duration_p95': ('trip_duration_minutes', p95),
-        'speed_p50':    ('avg_speed_mph', p50),
-        'distance_p50': ('trip_distance', p50),
-        'distance_p95': ('trip_distance', p95),
-        'avg_distance': ('trip_distance', 'mean'),
-        'trips':        ('trip_distance', 'count'),
-        'revuenue_per_trip': ('total_amount', lambda x: x[~qa_flags.loc[x.index, 'invalid_total_amount']].sum() /
-                                                        x[~qa_flags.loc[x.index, 'invalid_total_amount']].count() ),
-        'revenue_per_mile': ('total_amount', lambda x: x[~qa_flags.loc[x.index, 'invalid_total_amount']].sum() / 
-                                                       df_calc.loc[x[~qa_flags.loc[x.index, 'invalid_total_amount']].index, 'trip_distance'].sum())
+        'Date': ('tpep_pickup_datetime', lambda x: x.dt.date.iloc[0]),
+        'Day_of_Week': ('pickup_day_of_week', 'first'),
+        'Total_trips': ('tpep_pickup_datetime', 'count'),
+        'Total_fare': ('fare_amount', lambda x: x[~qa_flags.loc[x.index, 'invalid_fare_amount']].sum()),
+        'Total amount': ('total_amount', lambda x: x[(~qa_flags.loc[x.index, 'invalid_total_amount']) & (~qa_flags.loc[x.index, 'fare_total_mismatch'])].sum()),
+        'duration_p50': ('trip_duration_minutes', lambda x: p50(x[(~qa_flags.loc[x.index, 'excessive_duration']) & (~qa_flags.loc[x.index, 'short_duration_long_distance'])])),
+        'duration_p95': ('trip_duration_minutes', lambda x: p95(x[(~qa_flags.loc[x.index, 'excessive_duration']) & (~qa_flags.loc[x.index, 'short_duration_long_distance'])])),
+        'speed_p50': ('avg_speed_mph', lambda x: p50(x[~qa_flags.loc[x.index, 'excessive_speed']])),
+        'distance_p50': ('trip_distance', lambda x: p50(x[(~qa_flags.loc[x.index, 'suspicious_zero_fare']) & (~qa_flags.loc[x.index, 'short_duration_long_distance'])])),
+        'distance_p95': ('trip_distance', lambda x: p95(x[(~qa_flags.loc[x.index, 'suspicious_zero_fare']) & (~qa_flags.loc[x.index, 'short_duration_long_distance'])])),
+        'avg_distance': ('trip_distance', lambda x: x[(~qa_flags.loc[x.index, 'suspicious_zero_fare']) & (~qa_flags.loc[x.index, 'short_duration_long_distance'])].mean()),
+        'trips': ('trip_distance', 'count'),
+        'revenue_per_trip': ('fare_amount', lambda x: x[~qa_flags.loc[x.index, 'invalid_fare_amount']].sum() / x[~qa_flags.loc[x.index, 'invalid_fare_amount']].count()),
+        'revenue_per_mile': ('fare_amount', lambda x: x[~qa_flags.loc[x.index, 'invalid_fare_amount']].sum() / df_calc.loc[x[~qa_flags.loc[x.index, 'invalid_fare_amount']].index, 'trip_distance'].sum())
     }
 
     # Create binary columns for each time bin

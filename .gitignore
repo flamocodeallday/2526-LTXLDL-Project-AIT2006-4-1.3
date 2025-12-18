@@ -2,6 +2,7 @@
 /raw/*.parquet
 /processed/
 /reports/*.csv
+/figures/*.png
 
 # PYTHON & VSCODE
 __pycache__/
