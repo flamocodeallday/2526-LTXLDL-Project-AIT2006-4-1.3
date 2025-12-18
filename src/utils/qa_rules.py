@@ -45,7 +45,7 @@ def run_quality_check(df: pd.DataFrame, current_month: int) -> pd.DataFrame:
 
     # RULES RELATED TO PAYMENT AND AMOUNTS
     # Rule 12: Negative fare amount -> Action: Flag
-    qa_flags['invalid_fare_amount'] = df['fare_amount'] <= 0
+    qa_flags['invalid_fare_amount'] = df['fare_amount'] < 0
 
     # Rule 13: Negative tip amount -> Action: Flag
     qa_flags['invalid_tip_amount'] = df['tip_amount'] < 0
