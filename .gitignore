@@ -1,6 +1,7 @@
 # LARGE FILES
 /raw/*.parquet
-/processed/
+/processed/cleaned_data/*.parquet
+/processed/flags_for_analysis/*.parquet
 /reports/*.csv
 /figures/*.png
 
