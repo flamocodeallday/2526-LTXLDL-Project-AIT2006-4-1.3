@@ -5,17 +5,18 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
-def visualize_summary(df_month: pd.DataFrame, kpi_month: pd.DataFrame) -> None: 
+def visualize_summary(df_month: pd.DataFrame, kpi_daily: pd.DataFrame) -> None: 
     df = df_month.copy()
-    kpi = kpi_month.copy()
+    kpi = kpi_daily.copy()
+    month_name = df['tpep_pickup_datetime'].dt.strftime('%B').unique()[0]
 
     # Plot revenue per day of the month.
     # LinePlot
     revenue_per_day = kpi['Total_fare']
 
     fig1 = plt.figure(figsize=(10, 6))
-    plt.plot(kpi['Date'].dt.day, revenue_per_day.values, marker='o')
-    plt.title('Revenue per day in month')
+    plt.plot(revenue_per_day.index.astype(str), revenue_per_day.values, marker='o')
+    plt.title(f'Revenue per day in {month_name}')
     plt.xlabel('Day of month')
     plt.ylabel('Total Revenue')
     plt.grid()
@@ -26,8 +27,8 @@ def visualize_summary(df_month: pd.DataFrame, kpi_month: pd.DataFrame) -> None:
     trips_per_day = kpi['Total_trips']
 
     fig2 = plt.figure(figsize=(10, 6))
-    plt.bar(kpi['Date'].dt.day, trips_per_day.values)
-    plt.title('Trips per day in month')
+    plt.bar(trips_per_day.index.astype(str), trips_per_day.values)
+    plt.title(f'Trips per day in {month_name}')
     plt.xlabel('Day of month')
     plt.ylabel('Total Trips')
     plt.grid()
@@ -37,19 +38,18 @@ def visualize_summary(df_month: pd.DataFrame, kpi_month: pd.DataFrame) -> None:
     # Heatmap with 7 days of week
     day_map = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-    weekday_counts = df['pickup_day_of_week'].value_counts().reindex(day_map)
-
     df['pickup_hour'] = df['tpep_pickup_datetime'].dt.hour
 
     fig3 = plt.figure(figsize=(10, 6))
     sns.heatmap(data=df.groupby(['pickup_day_of_week', 'pickup_hour']).size().unstack(fill_value=0).reindex(day_map), cmap="viridis")
-    plt.title('Trip per week')
+    plt.title(f'Trip per week in {month_name}')
     plt.xlabel('Day of week')
     plt.ylabel('Total amount of trip')
 
 def visualize_customer_segments(df_month: pd.DataFrame, qa_flags: pd.DataFrame) -> None:
     df = df_month.copy()
     qa = qa_flags.copy()
+    month_name = df['tpep_pickup_datetime'].dt.strftime('%B').unique()[0]
 
     # Plot distribution of payment types
     # Pie chart
@@ -57,7 +57,7 @@ def visualize_customer_segments(df_month: pd.DataFrame, qa_flags: pd.DataFrame) 
 
     fig1 = plt.figure(figsize=(10, 6))
     plt.pie(payment_counts.values, labels=None, autopct=None, startangle=90, wedgeprops={'linewidth': 1, 'edgecolor': 'white'})
-    plt.title("Distribution of Payment type", fontsize=18)
+    plt.title(f"Distribution of Payment type in {month_name}", fontsize=18)
     plt.legend(payment_counts.index, title="Payment type", loc="lower center", bbox_to_anchor=(0.5, -0.1), ncol=4)
     plt.tight_layout()
 
@@ -67,7 +67,7 @@ def visualize_customer_segments(df_month: pd.DataFrame, qa_flags: pd.DataFrame) 
 
     fig2 = plt.figure(figsize=(10, 6))
     plt.bar(passenger_counts.index, passenger_counts.values)
-    plt.title('Trips with more than 2 passengers')
+    plt.title(f'Trips with more than 2 passengers in {month_name}')
     plt.xlabel('Number of passengers')
     plt.ylabel('Total trips')
     plt.grid()
@@ -75,55 +75,26 @@ def visualize_customer_segments(df_month: pd.DataFrame, qa_flags: pd.DataFrame) 
 
     # Plot tip amount correlation with distance and duration
     # Correlation matrix (3x3)
-    # Implemented: correlation heatmap + PairGrid with hex/small scatter to avoid overplotting
-    cols = ['tip_amount', 'trip_distance']
-    # ensure duration column
-    if 'tpep_dropoff_datetime' in df.columns and 'tpep_pickup_datetime' in df.columns:
-        df['duration_min'] = (df['tpep_dropoff_datetime'] - df['tpep_pickup_datetime']).dt.total_seconds() / 60
-        cols.append('duration_min')
-    else:
-        # If we can't derive duration, only use available columns
-        if 'duration_min' in df.columns:
-            cols.append('duration_min')
-
-    # Exclude common QA flags that bias tips/trips
-    flag_cols = ['suspicious_zero_fare', 'short_duration_long_distance', 'excessive_duration', 'invalid_payment_type']
-    present_flags = [c for c in flag_cols if c in qa.columns]
-    if present_flags:
-        mask = ~qa[present_flags].any(axis=1)
-    else:
-        mask = pd.Series(True, index=df.index)
-
-    df_corr = df.loc[mask, cols].dropna()
-    if not df_corr.empty and len(cols) >= 2:
-        corr = df_corr.corr()
-        fig_corr = plt.figure(figsize=(6,5))
-        sns.heatmap(corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
-        plt.title('Correlation (tip, distance, duration)')
-        plt.tight_layout()
-
-        # PairGrid with hexbin (lower), scatter (upper), kde (diag)
-        g = sns.PairGrid(df_corr, vars=cols, diag_sharey=False, corner=False)
-        g.map_lower(lambda x, y, **k: plt.hexbin(x, y, gridsize=40, cmap='viridis', mincnt=1))
-        g.map_upper(sns.scatterplot, s=6, alpha=0.3)
-        g.map_diag(sns.kdeplot)
-        plt.subplots_adjust(top=0.93)
-        g.fig.suptitle('Pairwise relationships (hexbin lower to avoid overplotting)')
-    else:
-        # fallback: if insufficient data
-        plt.figure()
-        plt.title('Insufficient data for tip-distance-duration correlation')
+    cols = ['tip_amount', 'trip_distance', 'trip_duration_minutes']
+    mask = (~qa['invalid_tip_amount']) & (~qa['suspicious_zero_fare']) & (~qa['short_duration_long_distance']) & (~qa['excessive_speed']) & (~qa['excessive_duration'])
+    df_corr = df.loc[mask, cols]
+    corr_matrix = df_corr.corr()
+    fig_corr = plt.figure(figsize=(6,5))
+    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+    plt.title(f'Correlation (tip, distance, duration) in {month_name}')
+    plt.tight_layout()
 
 def visualize_temporal_trends(df_month: pd.DataFrame, qa_flags: pd.DataFrame) -> None:
     df = df_month.copy()
     qa = qa_flags.copy()
+    month_name = df['tpep_pickup_datetime'].dt.strftime('%B').unique()[0]
 
     # Plot average speed per hour of day
     # Histogram
-    avg_speed_per_hour = df.loc[(~qa['invalid_speed']) & (~qa['excessive_speed'])].groupby(df['tpep_pickup_datetime'].dt.hour)['avg_speed_mph'].mean()
+    avg_speed_per_hour = df.loc[(~qa['excessive_speed'])].groupby(df['tpep_pickup_datetime'].dt.hour)['avg_speed_mph'].mean()
     fig1 = plt.figure(figsize=(10, 6))
     plt.hist(avg_speed_per_hour.index, weights=avg_speed_per_hour.values, bins = 24, rwidth=0.8)
-    plt.title('Average Speed per Hour')
+    plt.title(f'Average Speed per Hour in {month_name}')
     plt.xlabel('Hour of day')
     plt.ylabel('Average Speed (mph)')
 
@@ -132,7 +103,7 @@ def visualize_temporal_trends(df_month: pd.DataFrame, qa_flags: pd.DataFrame) ->
     trip_count_per_hour = df.loc[(~qa['suspicious_zero_fare']) & (~qa['short_duration_long_distance']) & (~qa['excessive_speed']) & (~qa['excessive_duration'])].groupby(df['tpep_pickup_datetime'].dt.hour)['tpep_pickup_datetime'].count()
     fig2 = plt.figure()
     sns.barplot(x=trip_count_per_hour.index, y=trip_count_per_hour.values, palette="viridis")
-    plt.title('Trip per hour')
+    plt.title(f'Trip per hour in {month_name}')
     plt.xlabel('Hour of day')
     plt.ylabel('Total amount of trip')
 
@@ -141,98 +112,57 @@ def visualize_temporal_trends(df_month: pd.DataFrame, qa_flags: pd.DataFrame) ->
     revenue_per_hour = df.loc[(~qa['suspicious_zero_fare']) & (~qa['short_duration_long_distance']) & (~qa['excessive_speed']) & (~qa['excessive_duration'])].groupby(df['tpep_pickup_datetime'].dt.hour)['total_amount'].sum()
     fig3 = plt.figure()
     plt.plot(revenue_per_hour.index, revenue_per_hour.values, marker='o')
-    plt.title('Revenue per hour')
+    plt.title(f'Revenue per hour in {month_name}')
     plt.xlabel('Hour of day')
     plt.ylabel('Total Revenue') 
 
 def visualize_trip_characteristics(df_month: pd.DataFrame, qa_flags: pd.DataFrame) -> None:
     df = df_month.copy()
     qa = qa_flags.copy()
+    mask = (~qa['invalid_tip_amount']) & (~qa['suspicious_zero_fare']) & (~qa['short_duration_long_distance']) & (~qa['excessive_speed']) & (~qa['excessive_duration'])
+    month_name = df['tpep_pickup_datetime'].dt.strftime('%B').unique()[0]
+
     # Plot distance distribution
     # Histogram
-    # Use log1p transform to handle long tail and avoid overplotting
-    if 'trip_distance' not in df.columns:
-        plt.figure()
-        plt.title('trip_distance not found in dataframe')
-    else:
-        # Exclude flagged unrealistic trips
-        flag_cols = ['short_duration_long_distance', 'excessive_speed', 'excessive_duration', 'suspicious_zero_fare']
-        present_flags = [c for c in flag_cols if c in qa.columns]
-        if present_flags:
-            mask = ~qa[present_flags].any(axis=1)
-        else:
-            mask = pd.Series(True, index=df.index)
+    dist = df.loc[mask, 'trip_distance'].dropna()
+    plt.figure(figsize=(10,5))
+    sns.histplot(np.log1p(dist), bins=60, kde=True, color='C0')
+    plt.title(f'Trip distance distribution (log1p scale) in {month_name}')
+    plt.xlabel('log1p(trip_distance) (miles)')
+    plt.ylabel('Count')
+    plt.tight_layout()    
 
-        dist = df.loc[mask, 'trip_distance'].dropna()
-        plt.figure(figsize=(10,5))
-        sns.histplot(np.log1p(dist), bins=60, kde=True, color='C0')
-        plt.title('Trip distance distribution (log1p scale)')
-        plt.xlabel('log1p(trip_distance) (miles)')
-        plt.ylabel('Count')
-        plt.tight_layout()
 
     # Plot duration distribution
     # Histogram
-    if 'tpep_dropoff_datetime' in df.columns and 'tpep_pickup_datetime' in df.columns:
-        df['duration_min'] = (df['tpep_dropoff_datetime'] - df['tpep_pickup_datetime']).dt.total_seconds() / 60
-        dur = df.loc[mask, 'duration_min'].dropna()
-        plt.figure(figsize=(10,5))
-        sns.histplot(np.log1p(dur), bins=60, kde=True, color='C1')
-        plt.title('Trip duration distribution (log1p scale)')
-        plt.xlabel('log1p(duration_min)')
-        plt.ylabel('Count')
-        plt.tight_layout()
-    elif 'duration_min' in df.columns:
-        dur = df.loc[mask, 'duration_min'].dropna()
-        plt.figure(figsize=(10,5))
-        sns.histplot(np.log1p(dur), bins=60, kde=True, color='C1')
-        plt.title('Trip duration distribution (log1p scale)')
-        plt.xlabel('log1p(duration_min)')
-        plt.ylabel('Count')
-        plt.tight_layout()
-    else:
-        plt.figure()
-        plt.title('Duration columns not available to plot duration distribution')
+    dur = df.loc[mask, 'trip_duration_minutes'].dropna()
+    plt.figure(figsize=(10,5))
+    sns.histplot(np.log1p(dur), bins=60, kde=True, color='C1')
+    plt.title(f'Trip duration distribution (log1p scale) in {month_name}')
+    plt.xlabel('log1p(duration_min)')
+    plt.ylabel('Count')
+    plt.tight_layout()
 
 def visualize_geographical_analysis(df_month: pd.DataFrame, qa_flags: pd.DataFrame) -> None:
     df = df_month.copy()
     qa = qa_flags.copy()
     # Top 10 pick up zones 
     # Horizontal Bar plot
-    # Prefer PULocationID / DOLocationID; if not present, fallback to zone name columns
-    pu_cols = [c for c in ['PULocationID', 'pickup_zone', 'PUlocationID', 'PU_zone'] if c in df.columns]
-    do_cols = [c for c in ['DOLocationID', 'dropoff_zone', 'DOlocationID', 'DO_zone'] if c in df.columns]
+    LocationID_counts = df['PU_Zone'].value_counts().nlargest(10).sort_values(ascending=False)
+    month_name = df['tpep_pickup_datetime'].dt.strftime('%B').unique()[0]
 
-    # Exclude location-related QA flags if present
-    location_flags = [c for c in ['invalid_location'] if c in qa.columns]
-    if location_flags:
-        mask_loc = ~qa[location_flags].any(axis=1)
-    else:
-        mask_loc = pd.Series(True, index=df.index)
-
-    if pu_cols:
-        pu_col = pu_cols[0]
-        top_pu = df.loc[mask_loc, pu_col].value_counts().nlargest(10).sort_values()
-        plt.figure(figsize=(8,6))
-        top_pu.plot(kind='barh', color='C2')
-        plt.title('Top 10 Pickup Locations (' + pu_col + ')')
-        plt.xlabel('Number of trips')
-        plt.ylabel('')
-        plt.tight_layout()
-    else:
-        plt.figure()
-        plt.title('No pickup location column found to produce top 10 pickups')
+    fig5 = plt.figure(figsize=(10, 6))
+    sns.barplot(x=LocationID_counts.values, y=LocationID_counts.index, palette="viridis", orient='h', order=LocationID_counts.index)
+    plt.title(f'Top 10 most Pick Up Trips LocationID in {month_name}')
+    plt.xlabel('Total amount of trip')
+    plt.ylabel('LocationId')
 
     # Top 10 drop off zones
-    if do_cols:
-        do_col = do_cols[0]
-        top_do = df.loc[mask_loc, do_col].value_counts().nlargest(10).sort_values()
-        plt.figure(figsize=(8,6))
-        top_do.plot(kind='barh', color='C3')
-        plt.title('Top 10 Dropoff Locations (' + do_col + ')')
-        plt.xlabel('Number of trips')
-        plt.ylabel('')
-        plt.tight_layout()
-    else:
-        plt.figure()
-        plt.title('No dropoff location column found to produce top 10 dropoffs')
+    # Horizontal Bar plot
+    LocationID_counts = df['DO_Zone'].value_counts().nlargest(10).sort_values(ascending=False)
+
+    fig5 = plt.figure(figsize=(10, 6))
+    sns.barplot(x=LocationID_counts.values, y=LocationID_counts.index, palette="viridis", orient='h', order=LocationID_counts.index)
+    plt.title(f'Top 10 most Drop Off Trips LocationID in {month_name}')
+    plt.xlabel('Total amount of trip')
+    plt.ylabel('LocationId')
