@@ -1,120 +1,104 @@
 import pandas as pd
-import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
+def compute_kpi_zone_time(df: pd.DataFrame, qa_flags: pd.DataFrame) -> pd.DataFrame:
+    df_calc = df.copy()
+    qa_flags = qa_flags.copy()
 
-def cluster_zone_hour_kpi(
-    df: pd.DataFrame,
-    feature_cols: list = None,
-    n_clusters: int = 4,
-    random_state: int = 42
-):
-    """
-    Phân cụm zone / khung giờ dựa trên vector KPI.
+    # Define time bins
+    bin = [0, 4, 7, 10, 16, 19, 24]
+    labels = ['Early Morning', 'Morning','Morning Rush', 'Midday', 'Evening Rush', 'Late Night']
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame chứa KPI, mỗi dòng là (zone, hour).
-        Ví dụ cột:
-        - zone_id
-        - hour
-        - trips_index
-        - duration_p50
-        - duration_p95
+    # Assign time bins based on pickup hour
+    df_calc['time_bin'] = pd.cut(df_calc['tpep_pickup_datetime'].dt.hour, bins=bin, labels=labels, right=False)
 
-    feature_cols : list
-        Danh sách cột KPI dùng để clustering.
+    # Use PU_Zone as zone
+    df_calc['zone'] = df_calc['PU_Zone']
 
-    n_clusters : int
-        Số cụm KMeans.
+    # Calculation functions
+    def p50(x): return x.quantile(0.5)
+    def p95(x): return x.quantile(0.95)
 
-    random_state : int
-        Random seed cho KMeans.
+    # Define aggregation rules
+    agg_rules = {
+        'duration_p50': ('trip_duration_minutes', p50),
+        'duration_p95': ('trip_duration_minutes', p95),
+        'speed_p50': ('avg_speed_mph', p50),
+        'avg_trip_distance': ('trip_distance', 'mean'),
+        'trips': ('trip_distance', 'count'),
+    }
 
-    Returns
-    -------
-    df_clustered : pd.DataFrame
-        DataFrame gốc + cột cluster + cluster_name.
+    # Group by zone and time_bin
+    df_kpi = df_calc.groupby(['zone', 'time_bin']).agg(**agg_rules).reset_index()
 
-    cluster_profile : pd.DataFrame
-        Trung bình KPI theo từng cluster.
+    # Compute trips_index_100: normalize trips to index 100
+    # Assuming base is the overall average trips per zone-time
+    base_value = df_kpi['trips'].mean()
+    df_kpi['trips_index_100'] = (df_kpi['trips'] / base_value) * 100
 
-    cluster_description : dict
-        Mô tả ngắn gọn cho từng cluster.
-    """
+    return df_kpi
 
-    if feature_cols is None:
-        feature_cols = [
-            "trips_index",
-            "duration_p50",
-            "duration_p95"
-        ]
+def cluster_zone_time(df_kpi_zone_time: pd.DataFrame, n_clusters: int = 4) -> tuple:
+    features = ['duration_p50', 'duration_p95', 'trips_index_100']
 
-    # -----------------------
-    # 1. Kiểm tra dữ liệu
-    # -----------------------
-    missing_cols = [c for c in feature_cols if c not in df.columns]
-    if missing_cols:
-        raise ValueError(f"Thiếu cột KPI: {missing_cols}")
+    df_cluster = (
+        df_kpi_zone_time
+        .set_index(['zone', 'time_bin'])
+        [features]
+        .dropna()
+    )
 
-    df = df.copy().reset_index(drop=True)
-
-    # -----------------------
-    # 2. Chuẩn hóa
-    # -----------------------
+    # Scale data
     scaler = StandardScaler()
-    X = scaler.fit_transform(df[feature_cols])
+    X = scaler.fit_transform(df_cluster)
 
-    # -----------------------
-    # 3. KMeans
-    # -----------------------
-    kmeans = KMeans(
-        n_clusters=n_clusters,
-        random_state=random_state,
-        n_init=10
+    # Fit KMeans
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    df_cluster['cluster'] = kmeans.fit_predict(X)
+
+    # Analyze centroids
+    centroids = pd.DataFrame(
+        scaler.inverse_transform(kmeans.cluster_centers_),
+        columns=features
     )
+    centroids['cluster'] = centroids.index
 
-    df["cluster"] = kmeans.fit_predict(X)
-
-    # -----------------------
-    # 4. Hồ sơ cụm (profile)
-    # -----------------------
-    cluster_profile = (
-        df
-        .groupby("cluster")[feature_cols]
-        .mean()
-        .round(2)
-        .sort_index()
-    )
-
-    # -----------------------
-    # 5. Đặt tên & mô tả cụm
-    # (có thể chỉnh tay cho report)
-    # -----------------------
-    cluster_names = {}
-    cluster_description = {}
-
-    for c in cluster_profile.index:
-        row = cluster_profile.loc[c]
-
-        if row["trips_index"] < 0.8 and row["duration_p95"] < 20:
-            name = "Low demand – short trips"
-            desc = "Nhu cầu thấp, chuyến ngắn, thường là off-peak hoặc khu dân cư."
-        elif row["trips_index"] > 1.3 and row["duration_p95"] < 40:
-            name = "Peak demand – efficient flow"
-            desc = "Nhu cầu cao, thời lượng ổn định, giờ cao điểm."
-        elif row["duration_p95"] > 50:
-            name = "Congested / long-tail trips"
-            desc = "Biến động lớn, dễ tắc nghẽn hoặc chuyến dài."
+    # Name clusters based on rules
+    def name_cluster(row):
+        if row['trips_index_100'] > 500 and row['duration_p95'] > 20:
+            return 'High Demand – Congested'
+        elif row['trips_index_100'] < 50 and row['duration_p50'] < 30:
+            return 'Low Demand – Smooth Flow'
+        elif row['duration_p95'] > 50:
+            return 'Unstable Traffic'
         else:
-            name = "Moderate demand – mixed pattern"
-            desc = "Nhu cầu và thời lượng trung bình, hành vi hỗn hợp."
+            return 'Efficient High Volume'
 
-        cluster_names[c] = name
-        cluster_description[c] = desc
+    centroids['cluster_name'] = centroids.apply(name_cluster, axis=1)
 
-    df["cluster_name"] = df["cluster"].map(cluster_names)
+    # Add descriptions
+    descriptions = {
+        'High Demand – Congested': 'Zones and time bins with high trip volume and long 95th percentile durations, indicating congestion and high demand.',
+        'Low Demand – Smooth Flow': 'Zones and time bins with low trip volume and short median durations, suggesting smooth traffic flow.',
+        'Unstable Traffic': 'Zones and time bins with very long 95th percentile durations, indicating traffic instability.',
+        'Efficient High Volume': 'Zones and time bins with balanced high volume and reasonable durations, efficient operations.'
+    }
 
-    return df, cluster_profile, cluster_description
+    centroids['description'] = centroids['cluster_name'].map(descriptions)
+
+    # Map cluster names back to df_cluster
+    cluster_name_map = centroids.set_index('cluster')['cluster_name']
+    df_cluster['cluster_name'] = df_cluster['cluster'].map(cluster_name_map)
+
+    # Reset index to have zone and time_bin as columns
+    df_cluster = df_cluster.reset_index()
+
+    return df_cluster, centroids
+
+def cluster_zones_with_kpi(df: pd.DataFrame, qa_flags: pd.DataFrame, n_clusters: int = 4) -> tuple:
+    # Compute KPIs
+    kpi_df = compute_kpi_zone_time(df, qa_flags)
+    
+    # Perform clustering
+    return cluster_zone_time(kpi_df, n_clusters)
