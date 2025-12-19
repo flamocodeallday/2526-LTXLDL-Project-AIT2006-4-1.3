@@ -3,6 +3,8 @@
 /processed/cleaned_data/*.parquet
 /processed/flags_for_analysis/*.parquet
 /reports/*.csv
+/reports/cluster_zone/*.parquet
+/figures/*/*.png
 
 # PYTHON & VSCODE
 __pycache__/
