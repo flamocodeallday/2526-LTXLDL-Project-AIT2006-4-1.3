@@ -59,16 +59,22 @@ def visualize_customer_segments(df_month: pd.DataFrame, qa_flags: pd.DataFrame) 
     plt.legend(payment_counts.index, title="Payment type", loc="lower center", bbox_to_anchor=(0.5, -0.1), ncol=4)
     plt.tight_layout()
 
-    # Plot trips with passenger count more than 2 
-    # Bar plot
-    passenger_counts = df.loc[(~qa['unusual_passenger_count']) & (df['passenger_count'] > 2), 'passenger_count'].value_counts().sort_index()
-
+    # Plot daily trend of group rides (passenger_count > 2)
+    # Bar plot (30-31 columns for days of month)
+    
+    mask_group = (~qa['unusual_passenger_count']) & (df['passenger_count'] > 2)
+    group_rides = df.loc[mask_group]
+    
+    daily_group_counts = group_rides.groupby(group_rides['tpep_pickup_datetime'].dt.day).size()
+    
+    # 3. Plot
     fig2 = plt.figure(figsize=(10, 6))
-    plt.bar(passenger_counts.index, passenger_counts.values)
-    plt.title(f'Trips with more than 2 passengers in {month_name}')
-    plt.xlabel('Number of passengers')
-    plt.ylabel('Total trips')
-    plt.grid()
+    plt.bar(daily_group_counts.index, daily_group_counts.values, color='teal', alpha=0.7)
+    plt.title(f'Daily Volume of Group Rides (>2 Passengers) in {month_name}')
+    plt.xlabel('Day of Month')
+    plt.ylabel('Total Group Trips')
+    plt.xticks(range(1, 32)) # Ensure x-axis shows all days
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
     plt.tight_layout()
 
     # Plot tip amount correlation with distance and duration
@@ -164,3 +170,40 @@ def visualize_geographical_analysis(df_month: pd.DataFrame, qa_flags: pd.DataFra
     plt.title(f'Top 10 most Drop Off Trips LocationID in {month_name}')
     plt.xlabel('Total amount of trip')
     plt.ylabel('LocationId')
+
+def visualize_years(df: pd.DataFrame) -> None:
+    df = df.copy()
+
+    # Change to datetime
+    df['tpep_pickup_datetime'] = pd.to_datetime(df['tpep_pickup_datetime'], utc=True)
+
+    # Extract month
+    df['month'] = df['tpep_pickup_datetime'].dt.strftime('%b')
+
+    month_order = ['Jan','Feb','Mar','Apr','May','Jun',
+                   'Jul','Aug','Sep','Oct','Nov','Dec']
+    df['month'] = pd.Categorical(df['month'], categories=month_order, ordered=True)
+    df = df.sort_values('month')
+
+    # Line chart Trips vs Revenue
+    fig, ax1 = plt.subplots(figsize=(10,5))
+    ax1.plot(df['month'], df['Total_trips'], marker='o', label='Trips')
+    ax1.set_ylabel('Trips')
+
+    ax2 = ax1.twinx()
+    ax2.plot(df['month'], df['Total_fare'], marker='s', linestyle='--', label='Revenue')
+    ax2.set_ylabel('Revenue')
+
+    ax1.set_title('Yearly Trips vs Revenue')
+    ax1.grid(alpha=0.3)
+    fig.legend(loc='upper left', bbox_to_anchor=(0.1,0.9))
+    plt.tight_layout()
+
+    # Bar chart Average Distance
+    plt.figure(figsize=(10,5))
+    plt.bar(df['month'], df['avg_distance'])
+    plt.title('Average Trip Distance by Month')
+    plt.ylabel('Average Distance')
+    plt.xlabel('Month')
+    plt.grid(axis='y', alpha=0.3)
+    plt.tight_layout()
